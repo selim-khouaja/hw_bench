@@ -5,7 +5,31 @@ set -e
 
 # Resolve script directory so this script can be run from any cwd
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-source "$SCRIPT_DIR/../InferenceX/benchmarks/benchmark_lib.sh"
+
+# ── Wait for vLLM health endpoint (inlined from InferenceX/benchmarks/benchmark_lib.sh) ──
+wait_for_server_ready() {
+    local port="" server_log="" server_pid="" sleep_interval=5
+    while [[ $# -gt 0 ]]; do
+        case $1 in
+            --port)          port="$2";         shift 2 ;;
+            --server-log)    server_log="$2";   shift 2 ;;
+            --server-pid)    server_pid="$2";   shift 2 ;;
+            --sleep-interval) sleep_interval="$2"; shift 2 ;;
+            *) echo "Unknown param: $1"; return 1 ;;
+        esac
+    done
+    tail -f -n +1 "$server_log" &
+    local TAIL_PID=$!
+    until curl --output /dev/null --silent --fail "http://0.0.0.0:${port}/health"; do
+        if ! kill -0 "$server_pid" 2>/dev/null; then
+            echo "Server died before becoming healthy. Exiting."
+            kill $TAIL_PID
+            exit 1
+        fi
+        sleep "$sleep_interval"
+    done
+    kill $TAIL_PID
+}
 
 # ── Required env vars ────────────────────────────────────────────────────────
 MODEL=${MODEL:?MODEL is required (e.g. BAAI/bge-m3)}
@@ -43,7 +67,7 @@ vllm serve "$MODEL" \
     > "$SERVER_LOG" 2>&1 &
 SERVER_PID=$!
 
-# ── Wait for server ready (reused from InferenceX/benchmarks/benchmark_lib.sh) ──
+# ── Wait for server ready ────────────────────────────────────────────────────
 wait_for_server_ready \
     --port "$PORT" \
     --server-log "$SERVER_LOG" \
