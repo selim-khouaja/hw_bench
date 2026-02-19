@@ -13,7 +13,61 @@ import random
 import string
 from pathlib import Path
 
+import atexit
+import threading
+from typing import Optional
+
 import aiohttp
+
+try:
+    import pynvml as _pynvml
+    _pynvml.nvmlInit()
+    atexit.register(_pynvml.nvmlShutdown)
+    _NVML_AVAILABLE: bool = True
+except Exception:
+    _pynvml = None  # type: ignore[assignment]
+    _NVML_AVAILABLE = False
+
+
+class PowerMonitor:
+    def __init__(self, poll_interval: float = 0.1) -> None:
+        self._poll_interval = poll_interval
+        self._stop_event = threading.Event()
+        self._samples: list[float] = []
+        self._thread: Optional[threading.Thread] = None
+
+    def start(self) -> None:
+        if not _NVML_AVAILABLE:
+            return
+        self._stop_event.clear()
+        self._samples = []
+        self._thread = threading.Thread(target=self._poll_loop, daemon=True)
+        self._thread.start()
+
+    def _poll_loop(self) -> None:
+        try:
+            num_gpus = _pynvml.nvmlDeviceGetCount()
+            handles = [_pynvml.nvmlDeviceGetHandleByIndex(i) for i in range(num_gpus)]
+        except Exception:
+            return
+        while not self._stop_event.wait(timeout=self._poll_interval):
+            total_mw: float = 0.0
+            for handle in handles:
+                try:
+                    total_mw += _pynvml.nvmlDeviceGetPowerUsage(handle)
+                except Exception:
+                    pass  # skip GPUs without power sensor
+            self._samples.append(total_mw / 1000.0)  # mW -> W
+
+    def stop(self) -> Optional[dict]:
+        if not _NVML_AVAILABLE or self._thread is None:
+            return None
+        self._stop_event.set()
+        self._thread.join(timeout=2.0)
+        self._thread = None
+        if not self._samples:
+            return None
+        return {"power_avg_w": sum(self._samples) / len(self._samples)}
 
 
 def generate_text(num_tokens: int) -> str:
@@ -68,12 +122,17 @@ async def run_sweep_point(
             lat = await post_embeddings(session, base_url, model, texts)
             latencies_ms.append(lat)
 
+    monitor = PowerMonitor(poll_interval=0.1)
     connector = aiohttp.TCPConnector(limit=concurrency + 4)
     timeout = aiohttp.ClientTimeout(total=300)
     async with aiohttp.ClientSession(connector=connector, timeout=timeout) as session:
+        monitor.start()
         t_start = time.perf_counter()
-        await asyncio.gather(*[bounded_request(b, session) for b in batches])
-        elapsed = time.perf_counter() - t_start
+        try:
+            await asyncio.gather(*[bounded_request(b, session) for b in batches])
+        finally:
+            elapsed = time.perf_counter() - t_start
+            power_stats = monitor.stop()
 
     completed = len(latencies_ms)
     latencies_ms.sort()
@@ -83,6 +142,16 @@ async def run_sweep_point(
     total_embeddings = completed * batch_size
     throughput = total_embeddings / elapsed if elapsed > 0 else 0.0
     throughput_per_user = throughput / concurrency if concurrency > 0 else 0.0
+
+    power_avg_w: Optional[float] = None
+    energy_joules: Optional[float] = None
+    emb_per_joule: Optional[float] = None
+
+    if power_stats is not None:
+        power_avg_w = round(power_stats["power_avg_w"], 2)
+        energy_joules = round(power_stats["power_avg_w"] * elapsed, 2)
+        if energy_joules and energy_joules > 0:
+            emb_per_joule = round(total_embeddings / energy_joules, 4)
 
     return {
         "model": model,
@@ -96,6 +165,9 @@ async def run_sweep_point(
         "p99_latency_ms": round(p99, 2),
         "throughput_emb_per_sec": round(throughput, 2),
         "throughput_per_user": round(throughput_per_user, 2),
+        "power_avg_w": power_avg_w,
+        "energy_joules": energy_joules,
+        "emb_per_joule": emb_per_joule,
     }
 
 

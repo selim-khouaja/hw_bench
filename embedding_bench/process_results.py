@@ -66,10 +66,16 @@ def print_markdown_table(records: list[dict]) -> None:
         "p99 (ms)",
         "Tput (emb/s)",
         "Tput/User",
+        "Power (W)",
+        "Emb/Joule",
     ]
     rows = []
     for r in records:
         model_short = r.get("model", "").split("/")[-1]
+        power_w = r.get("power_avg_w")
+        power_str = f"{power_w:.1f}" if power_w is not None else "-"
+        emb_per_joule = r.get("emb_per_joule")
+        emb_per_joule_str = f"{emb_per_joule:.2f}" if emb_per_joule is not None else "-"
         rows.append([
             model_short,
             r.get("hardware", ""),
@@ -80,6 +86,8 @@ def print_markdown_table(records: list[dict]) -> None:
             f"{r.get('p99_latency_ms', 0):.1f}",
             f"{r.get('throughput_emb_per_sec', 0):.1f}",
             f"{r.get('throughput_per_user', 0):.1f}",
+            power_str,
+            emb_per_joule_str,
         ])
 
     col_widths = [len(h) for h in headers]
