@@ -1,14 +1,22 @@
 models:
-  bge-m3:
+  bge-m3-vllm:
     hf-model: BAAI/bge-m3
-  e5basev2:
+    framework: vllm
+  bge-m3-sglang:
+    hf-model: BAAI/bge-m3
+    framework: sglang
+  e5basev2-vllm:
     hf-model: intfloat/e5-base-v2
-  nv-embed-v2:
+    framework: vllm
+  nv-embed-v2-vllm:
     hf-model: nvidia/NV-Embed-v2
-  qwen3-embedding8b:
+    framework: vllm
+  qwen3-embedding8b-vllm:
     hf-model: Qwen/Qwen3-Embedding-8B
-  bgelarge-env15:
+    framework: vllm
+  bgelarge-env15-vllm:
     hf-model: BAAI/bge-large-en-v1.5
+    framework: vllm
 
 sweep:
   chunk-sizes: [256, 512]

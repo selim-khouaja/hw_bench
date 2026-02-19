@@ -25,17 +25,21 @@ def load_results(results_dir: Path, hardware_override: str | None) -> list[dict]
             print(f"Warning: skipping {json_file}: {e}")
             continue
 
-        # Infer hardware from directory name pattern: <model_slug>__<hardware>
+        # Infer hardware and framework from directory name pattern:
+        # <model_slug>__<hardware> or <model_slug>__<hardware>__<framework>
         hardware = hardware_override
-        if hardware is None:
-            # Directory containing the json file may be named <slug>__<hw>
+        framework = data.get("framework")  # prefer value already in JSON
+        if hardware is None or framework is None:
             parent = json_file.parent.name
-            if "__" in parent:
-                hardware = parent.split("__", 1)[-1]
-            else:
-                hardware = "unknown"
+            parts = parent.split("__")
+            if hardware is None:
+                hardware = parts[-1] if len(parts) >= 2 else "unknown"
+            if framework is None:
+                framework = parts[-1] if len(parts) >= 3 else ""
 
         data["hardware"] = hardware
+        if "framework" not in data:
+            data["framework"] = framework
         # Derived metric: per-text p99 latency
         batch_size = data.get("batch_size", 1)
         p99 = data.get("p99_latency_ms", 0.0)
@@ -49,6 +53,7 @@ def sort_key(r: dict) -> tuple:
     return (
         r.get("model", ""),
         r.get("hardware", ""),
+        r.get("framework", ""),
         r.get("chunk_size", 0),
         r.get("batch_size", 0),
         r.get("concurrency", 0),
@@ -59,6 +64,7 @@ def print_markdown_table(records: list[dict]) -> None:
     headers = [
         "Model",
         "Hardware",
+        "Framework",
         "Chunk",
         "Batch",
         "Conc",
@@ -79,6 +85,7 @@ def print_markdown_table(records: list[dict]) -> None:
         rows.append([
             model_short,
             r.get("hardware", ""),
+            r.get("framework", ""),
             str(r.get("chunk_size", "")),
             str(r.get("batch_size", "")),
             str(r.get("concurrency", "")),

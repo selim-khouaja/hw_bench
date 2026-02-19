@@ -106,6 +106,7 @@ async def run_sweep_point(
     batch_size: int,
     concurrency: int,
     num_requests: int,
+    framework: str = "vllm",
 ) -> dict:
     """Run one (batch_size, concurrency) sweep point and return metrics."""
     # Pre-generate all text batches
@@ -155,6 +156,7 @@ async def run_sweep_point(
 
     return {
         "model": model,
+        "framework": framework,
         "chunk_size": chunk_size,
         "batch_size": batch_size,
         "concurrency": concurrency,
@@ -183,6 +185,7 @@ async def main() -> None:
     parser.add_argument("--batch-sizes", default="1,4,16,64,256", help="Comma-separated batch sizes")
     parser.add_argument("--concurrencies", default="1,4,16,64", help="Comma-separated concurrencies")
     parser.add_argument("--num-requests", type=int, default=200, help="Requests per sweep point")
+    parser.add_argument("--framework", default="vllm", help="Inference framework (vllm, sglang)")
     parser.add_argument("--result-dir", default="../results", help="Output directory")
     args = parser.parse_args()
 
@@ -206,6 +209,7 @@ async def main() -> None:
                 batch_size=batch_size,
                 concurrency=concurrency,
                 num_requests=args.num_requests,
+                framework=args.framework,
             )
             model_slug = args.model.replace("/", "_")
             fname = f"{model_slug}__chunk{args.chunk_size}__bs{batch_size}__conc{concurrency}.json"
