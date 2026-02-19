@@ -39,9 +39,10 @@ HF_TOKEN=${HF_TOKEN:?HF_TOKEN is required}
 # ── Optional env vars with defaults ─────────────────────────────────────────
 HARDWARE=${HARDWARE:-unknown}
 FRAMEWORK=${FRAMEWORK:-"vllm"}          # vllm | sglang
+FORCE=${FORCE:-false}
 CHUNK_SIZES=${CHUNK_SIZES:-"256,512"}
-BATCH_SIZES=${BATCH_SIZES:-"1,4,16,64,256"}
-CONCURRENCIES=${CONCURRENCIES:-"1,4,16,64"}
+BATCH_SIZES=${BATCH_SIZES:-"1,4,16,64,256,512,1024,2048,4096,8192,16384,32768"}
+CONCURRENCIES=${CONCURRENCIES:-"1,4"}
 NUM_REQUESTS=${NUM_REQUESTS:-200}
 PORT=${PORT:-8000}
 # Backward-compat alias: EXTRA_VLLM_ARGS is honoured if EXTRA_SERVER_ARGS is not set
@@ -110,7 +111,8 @@ for CHUNK_SIZE in ${CHUNK_SIZES//,/ }; do
         --concurrencies "$CONCURRENCIES" \
         --num-requests "$NUM_REQUESTS" \
         --framework "$FRAMEWORK" \
-        --result-dir "$RESULT_DIR"
+        --result-dir "$RESULT_DIR" \
+        $( [[ "$FORCE" == "true" ]] && echo "--force" )
 done
 
 # ── Shutdown server ───────────────────────────────────────────────────────────

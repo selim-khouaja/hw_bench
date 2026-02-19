@@ -187,6 +187,8 @@ async def main() -> None:
     parser.add_argument("--num-requests", type=int, default=200, help="Requests per sweep point")
     parser.add_argument("--framework", default="vllm", help="Inference framework (vllm, sglang)")
     parser.add_argument("--result-dir", default="../results", help="Output directory")
+    parser.add_argument("--force", action="store_true",
+                        help="Re-run and overwrite existing result files")
     args = parser.parse_args()
 
     batch_sizes = parse_int_list(args.batch_sizes)
@@ -196,8 +198,17 @@ async def main() -> None:
 
     random.seed(42)
 
+    model_slug = args.model.replace("/", "_")
+    skipped = 0
+    ran = 0
     for batch_size in batch_sizes:
         for concurrency in concurrencies:
+            fname = f"{model_slug}__chunk{args.chunk_size}__bs{batch_size}__conc{concurrency}.json"
+            out_path = result_dir / fname
+            if out_path.exists() and not args.force:
+                print(f"  Skipping {fname} (already exists, use --force to re-run)", flush=True)
+                skipped += 1
+                continue
             print(
                 f"  chunk={args.chunk_size} batch={batch_size} concurrency={concurrency} ...",
                 flush=True,
@@ -211,9 +222,6 @@ async def main() -> None:
                 num_requests=args.num_requests,
                 framework=args.framework,
             )
-            model_slug = args.model.replace("/", "_")
-            fname = f"{model_slug}__chunk{args.chunk_size}__bs{batch_size}__conc{concurrency}.json"
-            out_path = result_dir / fname
             with open(out_path, "w") as f:
                 json.dump(result, f, indent=2)
             print(
@@ -221,6 +229,9 @@ async def main() -> None:
                 f"tput={result['throughput_emb_per_sec']} emb/s  saved {out_path.name}",
                 flush=True,
             )
+            ran += 1
+    if skipped:
+        print(f"  Summary: ran={ran} skipped={skipped}", flush=True)
 
 
 if __name__ == "__main__":

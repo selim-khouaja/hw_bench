@@ -20,5 +20,5 @@ models:
 
 sweep:
   chunk-sizes: [256, 512]
-  batch-sizes: [1, 4, 16, 64, 128, 256]
-  concurrencies: [1, 4, 16, 64]
+  batch-sizes: [1, 4, 16, 64, 128, 256, 512, 1024, 2048, 4096, 8192, 16384, 32768]
+  concurrencies: [1, 4, 8]
