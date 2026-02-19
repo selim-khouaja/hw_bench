@@ -60,7 +60,6 @@ echo ""
 echo "Starting vLLM server on port $PORT ..."
 HUGGING_FACE_HUB_TOKEN="$HF_TOKEN" \
 vllm serve "$MODEL" \
-    --task embed \
     --port "$PORT" \
     --trust-remote-code \
     $EXTRA_VLLM_ARGS \
