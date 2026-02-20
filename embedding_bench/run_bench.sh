@@ -67,6 +67,7 @@ case "$FRAMEWORK" in
   vllm)
     HUGGING_FACE_HUB_TOKEN="$HF_TOKEN" \
     vllm serve "$MODEL" \
+        --task embedding \
         --port "$PORT" \
         --trust-remote-code \
         $EXTRA_SERVER_ARGS \
