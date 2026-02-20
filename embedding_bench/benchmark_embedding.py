@@ -84,6 +84,23 @@ def generate_text(num_tokens: int) -> str:
     return " ".join(words)
 
 
+async def fetch_max_model_len(base_url: str, model: str) -> Optional[int]:
+    """Query the server for the model's maximum sequence length."""
+    url = f"{base_url}/v1/models"
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.get(url) as resp:
+                if resp.status != 200:
+                    return None
+                data = await resp.json()
+                for entry in data.get("data", []):
+                    if entry.get("id") == model:
+                        return entry.get("max_model_len")
+    except Exception:
+        pass
+    return None
+
+
 async def post_embeddings(
     session: aiohttp.ClientSession,
     base_url: str,
@@ -213,6 +230,22 @@ async def main() -> None:
     result_dir.mkdir(parents=True, exist_ok=True)
 
     random.seed(42)
+
+    # Fetch the model's max sequence length and compute a safe word cap.
+    # Uses 5 tokens/word as a conservative upper bound for subword tokenizers.
+    # This prevents 400 errors when random words tokenize above the model's limit.
+    max_model_len = await fetch_max_model_len(args.base_url, args.model)
+    if max_model_len is not None:
+        _TOKENS_PER_WORD_CONSERVATIVE = 5
+        max_safe_words = (max_model_len - 2) // _TOKENS_PER_WORD_CONSERVATIVE
+        if args.chunk_size > max_safe_words:
+            print(
+                f"  WARNING: chunk_size={args.chunk_size} exceeds safe word limit "
+                f"({max_safe_words}) for max_model_len={max_model_len}. "
+                f"Capping to {max_safe_words}.",
+                flush=True,
+            )
+            args.chunk_size = max_safe_words
 
     model_slug = args.model.replace("/", "_")
     skipped = 0
