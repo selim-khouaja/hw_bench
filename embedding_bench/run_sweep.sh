@@ -31,7 +31,7 @@ sweep = config.get("sweep", {})
 global_chunk_sizes   = sweep.get("chunk-sizes",   [256, 512])
 global_batch_sizes   = sweep.get("batch-sizes",   [1, 4, 16, 64, 256])
 global_concurrencies = sweep.get("concurrencies", [1, 4, 16, 64])
-num_requests         = str(sweep.get("num-requests", 200))
+num_requests         = str(sweep.get("num-requests", 50))
 
 for key, model_cfg in config.get("models", {}).items():
     hf_model  = model_cfg["hf-model"]
