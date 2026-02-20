@@ -6,13 +6,13 @@ models:
     hf-model: intfloat/e5-base-v2
     framework: vllm
     chunk-sizes: [64, 128]   # 64→~118 tokens, 128→~237 tokens (both safely under 512-token BERT limit)
-  qwen3-embedding8b-vllm:
-    hf-model: Qwen/Qwen3-Embedding-8B
-    framework: vllm
   bgelarge-env15-vllm:
     hf-model: BAAI/bge-large-en-v1.5
     framework: vllm
     chunk-sizes: [64, 128]   # 64→~237 tokens, 128→~474 tokens (both safely under 512-token BERT limit)
+  qwen3-embedding8b-vllm:
+    hf-model: Qwen/Qwen3-Embedding-8B
+    framework: vllm
 
 sweep:
   chunk-sizes: [256, 512]
