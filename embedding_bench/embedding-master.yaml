@@ -12,6 +12,7 @@ models:
   bgelarge-env15-vllm:
     hf-model: BAAI/bge-large-en-v1.5
     framework: vllm
+    chunk-sizes: [64, 128]   # 64→~237 tokens, 128→~474 tokens (both safely under 512-token BERT limit)
 
 sweep:
   chunk-sizes: [256, 512]
