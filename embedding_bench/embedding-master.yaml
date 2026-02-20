@@ -2,9 +2,6 @@ models:
   bge-m3-vllm:
     hf-model: BAAI/bge-m3
     framework: vllm
-  bge-m3-sglang:
-    hf-model: BAAI/bge-m3
-    framework: sglang
   e5basev2-vllm:
     hf-model: intfloat/e5-base-v2
     framework: vllm
