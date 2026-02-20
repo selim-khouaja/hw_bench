@@ -2,9 +2,6 @@ models:
   bge-m3-vllm:
     hf-model: BAAI/bge-m3
     framework: vllm
-  e5basev2-vllm:
-    hf-model: intfloat/e5-base-v2
-    framework: vllm
   nv-embed-v2-vllm:
     hf-model: nvidia/NV-Embed-v2
     framework: vllm
