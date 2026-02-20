@@ -8,9 +8,11 @@
 #
 # Override the master config:
 #   MASTER_CONFIG=path/to/embedding-master.yaml HF_TOKEN=<tok> HARDWARE=h100 bash run_sweep.sh
-set -e
+set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+FAILED_MODELS=()
+
 MASTER_CONFIG="${MASTER_CONFIG:-"$SCRIPT_DIR/embedding-master.yaml"}"
 
 HF_TOKEN=${HF_TOKEN:?HF_TOKEN is required}
@@ -79,18 +81,29 @@ PYEOF
         continue
     fi
 
-    MODEL="$hf_model" \
-    FRAMEWORK="$framework" \
-    HF_TOKEN="$HF_TOKEN" \
-    HARDWARE="$HARDWARE" \
-    CHUNK_SIZES="$chunk_sizes" \
-    BATCH_SIZES="$batch_sizes" \
-    CONCURRENCIES="$concurrencies" \
-    NUM_REQUESTS="$num_requests" \
-    FORCE="$FORCE" \
-    bash "$SCRIPT_DIR/run_bench.sh"
+    if ! MODEL="$hf_model" \
+        FRAMEWORK="$framework" \
+        HF_TOKEN="$HF_TOKEN" \
+        HARDWARE="$HARDWARE" \
+        CHUNK_SIZES="$chunk_sizes" \
+        BATCH_SIZES="$batch_sizes" \
+        CONCURRENCIES="$concurrencies" \
+        NUM_REQUESTS="$num_requests" \
+        FORCE="$FORCE" \
+        bash "$SCRIPT_DIR/run_bench.sh"; then
+        echo ">>> FAILED: Model=$hf_model Framework=$framework"
+        FAILED_MODELS+=("$hf_model ($framework)")
+    fi
 
     echo ""
 done
 
 echo "=== Sweep complete ==="
+if [[ ${#FAILED_MODELS[@]} -gt 0 ]]; then
+    echo ""
+    echo "Failed models:"
+    for m in "${FAILED_MODELS[@]}"; do
+        echo "  - $m"
+    done
+    exit 1
+fi

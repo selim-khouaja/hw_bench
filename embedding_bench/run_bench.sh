@@ -2,8 +2,6 @@
 # Run embedding server and benchmark sweep for one model-hardware-framework combo.
 # Usage: MODEL=BAAI/bge-m3 HF_TOKEN=<token> HARDWARE=h100 bash run_bench.sh
 #        FRAMEWORK=sglang MODEL=BAAI/bge-m3 HF_TOKEN=<token> HARDWARE=h100 bash run_bench.sh
-set -e
-
 # Resolve script directory so this script can be run from any cwd
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
@@ -23,9 +21,9 @@ wait_for_server_ready() {
     local TAIL_PID=$!
     until curl --output /dev/null --silent --fail "$health_url"; do
         if ! kill -0 "$server_pid" 2>/dev/null; then
-            echo "Server died before becoming healthy. Exiting."
-            kill $TAIL_PID
-            exit 1
+            echo "Server died before becoming healthy."
+            kill $TAIL_PID 2>/dev/null || true
+            return 1
         fi
         sleep "$sleep_interval"
     done
@@ -67,7 +65,6 @@ case "$FRAMEWORK" in
   vllm)
     HUGGING_FACE_HUB_TOKEN="$HF_TOKEN" \
     vllm serve "$MODEL" \
-        --task embedding \
         --port "$PORT" \
         --trust-remote-code \
         $EXTRA_SERVER_ARGS \
@@ -93,18 +90,22 @@ esac
 SERVER_PID=$!
 
 # ── Wait for server ready ────────────────────────────────────────────────────
-wait_for_server_ready \
+if ! wait_for_server_ready \
     --health-url "$HEALTH_URL" \
     --server-log "$SERVER_LOG" \
-    --server-pid "$SERVER_PID"
+    --server-pid "$SERVER_PID"; then
+    echo "ERROR: Server failed to start for $MODEL" | tee -a "$RESULT_DIR/errors.log"
+    exit 1
+fi
 
 echo "Server ready (PID $SERVER_PID)."
 
 # ── Run benchmark sweep for each chunk size ──────────────────────────────────
+BENCH_ERRORS=0
 for CHUNK_SIZE in ${CHUNK_SIZES//,/ }; do
     echo ""
     echo "--- chunk_size=$CHUNK_SIZE ---"
-    python "$SCRIPT_DIR/benchmark_embedding.py" \
+    if ! python "$SCRIPT_DIR/benchmark_embedding.py" \
         --model "$MODEL" \
         --base-url "http://localhost:$PORT" \
         --chunk-size "$CHUNK_SIZE" \
@@ -113,7 +114,10 @@ for CHUNK_SIZE in ${CHUNK_SIZES//,/ }; do
         --num-requests "$NUM_REQUESTS" \
         --framework "$FRAMEWORK" \
         --result-dir "$RESULT_DIR" \
-        $( [[ "$FORCE" == "true" ]] && echo "--force" )
+        $( [[ "$FORCE" == "true" ]] && echo "--force" ); then
+        echo "ERROR: Benchmark failed for $MODEL chunk_size=$CHUNK_SIZE" | tee -a "$RESULT_DIR/errors.log"
+        BENCH_ERRORS=$((BENCH_ERRORS + 1))
+    fi
 done
 
 # ── Shutdown server ───────────────────────────────────────────────────────────
@@ -123,4 +127,9 @@ kill "$SERVER_PID" 2>/dev/null || true
 wait "$SERVER_PID" 2>/dev/null || true
 
 echo ""
-echo "Done. Results in $RESULT_DIR"
+if [[ $BENCH_ERRORS -gt 0 ]]; then
+    echo "Done with $BENCH_ERRORS error(s). Results in $RESULT_DIR"
+    exit 1
+else
+    echo "Done. Results in $RESULT_DIR"
+fi

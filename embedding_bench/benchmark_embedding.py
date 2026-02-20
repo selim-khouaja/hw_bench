@@ -201,6 +201,7 @@ async def main() -> None:
     model_slug = args.model.replace("/", "_")
     skipped = 0
     ran = 0
+    errors = 0
     for batch_size in batch_sizes:
         for concurrency in concurrencies:
             fname = f"{model_slug}__chunk{args.chunk_size}__bs{batch_size}__conc{concurrency}.json"
@@ -213,25 +214,32 @@ async def main() -> None:
                 f"  chunk={args.chunk_size} batch={batch_size} concurrency={concurrency} ...",
                 flush=True,
             )
-            result = await run_sweep_point(
-                base_url=args.base_url,
-                model=args.model,
-                chunk_size=args.chunk_size,
-                batch_size=batch_size,
-                concurrency=concurrency,
-                num_requests=args.num_requests,
-                framework=args.framework,
-            )
-            with open(out_path, "w") as f:
-                json.dump(result, f, indent=2)
-            print(
-                f"    -> p50={result['p50_latency_ms']}ms  p99={result['p99_latency_ms']}ms  "
-                f"tput={result['throughput_emb_per_sec']} emb/s  saved {out_path.name}",
-                flush=True,
-            )
-            ran += 1
-    if skipped:
-        print(f"  Summary: ran={ran} skipped={skipped}", flush=True)
+            try:
+                result = await run_sweep_point(
+                    base_url=args.base_url,
+                    model=args.model,
+                    chunk_size=args.chunk_size,
+                    batch_size=batch_size,
+                    concurrency=concurrency,
+                    num_requests=args.num_requests,
+                    framework=args.framework,
+                )
+                with open(out_path, "w") as f:
+                    json.dump(result, f, indent=2)
+                print(
+                    f"    -> p50={result['p50_latency_ms']}ms  p99={result['p99_latency_ms']}ms  "
+                    f"tput={result['throughput_emb_per_sec']} emb/s  saved {out_path.name}",
+                    flush=True,
+                )
+                ran += 1
+            except Exception as e:
+                print(f"    ERROR: {e}", flush=True)
+                error_path = result_dir / f"{fname}.error"
+                error_path.write_text(str(e))
+                errors += 1
+    print(f"  Summary: ran={ran} skipped={skipped} errors={errors}", flush=True)
+    if errors and ran == 0:
+        raise SystemExit(1)
 
 
 if __name__ == "__main__":
