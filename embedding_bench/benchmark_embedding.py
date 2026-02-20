@@ -21,6 +21,7 @@ import aiohttp
 
 try:
     import pynvml as _pynvml
+
     _pynvml.nvmlInit()
     atexit.register(_pynvml.nvmlShutdown)
     _NVML_AVAILABLE: bool = True
@@ -180,15 +181,30 @@ def parse_int_list(value: str) -> list[int]:
 async def main() -> None:
     parser = argparse.ArgumentParser(description="Embedding benchmark client")
     parser.add_argument("--model", required=True, help="HuggingFace model name")
-    parser.add_argument("--base-url", default="http://localhost:8000", help="vLLM base URL")
-    parser.add_argument("--chunk-size", type=int, required=True, help="Approximate tokens per text")
-    parser.add_argument("--batch-sizes", default="1,4,16,64,256", help="Comma-separated batch sizes")
-    parser.add_argument("--concurrencies", default="1,4,16,64", help="Comma-separated concurrencies")
-    parser.add_argument("--num-requests", type=int, default=200, help="Requests per sweep point")
-    parser.add_argument("--framework", default="vllm", help="Inference framework (vllm, sglang)")
+    parser.add_argument(
+        "--base-url", default="http://localhost:8000", help="vLLM base URL"
+    )
+    parser.add_argument(
+        "--chunk-size", type=int, required=True, help="Approximate tokens per text"
+    )
+    parser.add_argument(
+        "--batch-sizes", default="1,4,16,64,256", help="Comma-separated batch sizes"
+    )
+    parser.add_argument(
+        "--concurrencies", default="1,4,16,64", help="Comma-separated concurrencies"
+    )
+    parser.add_argument(
+        "--num-requests", type=int, default=200, help="Requests per sweep point"
+    )
+    parser.add_argument(
+        "--framework", default="vllm", help="Inference framework (vllm, sglang)"
+    )
     parser.add_argument("--result-dir", default="../results", help="Output directory")
-    parser.add_argument("--force", action="store_true",
-                        help="Re-run and overwrite existing result files")
+    parser.add_argument(
+        "--force",
+        action="store_true",
+        help="Re-run and overwrite existing result files",
+    )
     args = parser.parse_args()
 
     batch_sizes = parse_int_list(args.batch_sizes)
@@ -207,7 +223,10 @@ async def main() -> None:
             fname = f"{model_slug}__chunk{args.chunk_size}__bs{batch_size}__conc{concurrency}.json"
             out_path = result_dir / fname
             if out_path.exists() and not args.force:
-                print(f"  Skipping {fname} (already exists, use --force to re-run)", flush=True)
+                print(
+                    f"  Skipping {fname} (already exists, use --force to re-run)",
+                    flush=True,
+                )
                 skipped += 1
                 continue
             print(

@@ -28,25 +28,80 @@ with open(sys.argv[1]) as f:
     config = yaml.safe_load(f)
 
 sweep = config.get("sweep", {})
-chunk_sizes    = ",".join(str(x) for x in sweep.get("chunk-sizes",    [256, 512]))
-batch_sizes    = ",".join(str(x) for x in sweep.get("batch-sizes",    [1, 4, 16, 64, 256]))
-concurrencies  = ",".join(str(x) for x in sweep.get("concurrencies",  [1, 4, 16, 64]))
-num_requests   = str(sweep.get("num-requests", 200))
+global_chunk_sizes   = sweep.get("chunk-sizes",   [256, 512])
+global_batch_sizes   = sweep.get("batch-sizes",   [1, 4, 16, 64, 256])
+global_concurrencies = sweep.get("concurrencies", [1, 4, 16, 64])
+num_requests         = str(sweep.get("num-requests", 200))
 
 for key, model_cfg in config.get("models", {}).items():
     hf_model  = model_cfg["hf-model"]
     framework = model_cfg.get("framework", "vllm")
+    # Per-model overrides; fall back to global sweep values
+    chunk_sizes   = ",".join(str(x) for x in model_cfg.get("chunk-sizes",   global_chunk_sizes))
+    batch_sizes   = ",".join(str(x) for x in model_cfg.get("batch-sizes",   global_batch_sizes))
+    concurrencies = ",".join(str(x) for x in model_cfg.get("concurrencies", global_concurrencies))
     print(f"{hf_model}\t{framework}\t{chunk_sizes}\t{batch_sizes}\t{concurrencies}\t{num_requests}")
 PYEOF
 )
 
-echo "=== Embedding Sweep ==="
 echo "Config:    $MASTER_CONFIG"
 echo "Hardware:  $HARDWARE"
 echo "Models:    ${#MODEL_LINES[@]}"
 echo ""
 
-# ── Run bench for each model ──────────────────────────────────────────────────
+# ── Phase 1: Validation sweep (first config for each model) ──────────────────
+echo "=== Phase 1: Validation sweep (first config per model) ==="
+VALIDATION_FAILED=()
+
+for line in "${MODEL_LINES[@]}"; do
+    IFS=$'\t' read -r hf_model framework chunk_sizes batch_sizes concurrencies num_requests <<< "$line"
+
+    # Extract first value from each comma-separated list
+    first_chunk="${chunk_sizes%%,*}"
+    first_batch="${batch_sizes%%,*}"
+    first_conc="${concurrencies%%,*}"
+
+    # Skip if first-combo result file already exists
+    model_slug="${hf_model//\//_}"
+    result_dir="${RESULT_DIR:-"$SCRIPT_DIR/../results/${model_slug}__${HARDWARE}__${framework}"}"
+    first_result="${result_dir}/${model_slug}__chunk${first_chunk}__bs${first_batch}__conc${first_conc}.json"
+
+    if [[ -f "$first_result" && "$FORCE" != "true" ]]; then
+        echo ">>> Validation skip: $hf_model — first config already present"
+        continue
+    fi
+
+    echo ">>> Validating: $hf_model (chunk=$first_chunk batch=$first_batch conc=$first_conc)"
+    if ! MODEL="$hf_model" \
+        FRAMEWORK="$framework" \
+        HF_TOKEN="$HF_TOKEN" \
+        HARDWARE="$HARDWARE" \
+        CHUNK_SIZES="$first_chunk" \
+        BATCH_SIZES="$first_batch" \
+        CONCURRENCIES="$first_conc" \
+        NUM_REQUESTS="$num_requests" \
+        FORCE="$FORCE" \
+        bash "$SCRIPT_DIR/run_bench.sh"; then
+        echo ">>> VALIDATION FAILED: $hf_model ($framework)"
+        VALIDATION_FAILED+=("$hf_model ($framework)")
+    fi
+    echo ""
+done
+
+if [[ ${#VALIDATION_FAILED[@]} -gt 0 ]]; then
+    echo "=== Validation failed — aborting full sweep ==="
+    for m in "${VALIDATION_FAILED[@]}"; do
+        echo "  - $m"
+    done
+    exit 1
+fi
+
+echo "=== All models passed validation ==="
+echo ""
+
+# ── Phase 2: Full sweep ───────────────────────────────────────────────────────
+echo "=== Phase 2: Full sweep ==="
+
 for line in "${MODEL_LINES[@]}"; do
     IFS=$'\t' read -r hf_model framework chunk_sizes batch_sizes concurrencies num_requests <<< "$line"
 

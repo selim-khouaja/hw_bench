@@ -2,9 +2,10 @@ models:
   bge-m3-vllm:
     hf-model: BAAI/bge-m3
     framework: vllm
-  nv-embed-v2-vllm:
-    hf-model: nvidia/NV-Embed-v2
+  e5basev2-vllm:
+    hf-model: intfloat/e5-base-v2
     framework: vllm
+    chunk-sizes: [64, 128]   # 64→~118 tokens, 128→~237 tokens (both safely under 512-token BERT limit)
   qwen3-embedding8b-vllm:
     hf-model: Qwen/Qwen3-Embedding-8B
     framework: vllm
@@ -14,5 +15,5 @@ models:
 
 sweep:
   chunk-sizes: [256, 512]
-  batch-sizes: [1, 4, 16, 64, 128, 256, 512, 1024]
-  concurrencies: [1, 2, 4]
+  batch-sizes: [1, 16, 64, 128, 256, 512, 1024]
+  concurrencies: [1]
